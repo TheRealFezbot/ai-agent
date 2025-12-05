@@ -6,8 +6,9 @@ from google.genai import types
 from prompts import system_prompt
 from functions.get_files_info import schema_get_files_info
 from functions.get_file_content import schema_get_file_content
-from functions.write_file import schema_write_file
+from functions.write_file_content import schema_write_file
 from functions.run_python_file import schema_run_python_file
+from call_function import call_function
 
 
 
@@ -43,18 +44,28 @@ def main():
     prompt_tokens = response.usage_metadata.prompt_token_count
     response_tokens = response.usage_metadata.candidates_token_count
     
-    if args.verbose:
-        print("User prompt:", args.user_prompt)
-        print("Prompt tokens:", prompt_tokens)
-        print("Response tokens:", response_tokens)
 
     if response.function_calls:
+        tool_responses = []
         for function_call_part in response.function_calls:
-            print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+            function_call_result = call_function(function_call_part, verbose=args.verbose)
+            parts = function_call_result.parts
+            if not parts or not parts[0].function_response or not parts[0].function_response.response:
+                raise Exception("Fatal error: Couldn't find tool response.")
+            tool_responses.append(parts[0])
+
+            if args.verbose:
+                print(f"-> {function_call_result.parts[0].function_response.response}")
+            
     else:
         print("Response:")
         print(response.text)
 
+    if args.verbose:
+        print("User prompt:", args.user_prompt)
+        print("Prompt tokens:", prompt_tokens)
+        print("Response tokens:", response_tokens)
+        
 
 if __name__ == "__main__":
     main()
