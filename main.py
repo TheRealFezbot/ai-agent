@@ -29,43 +29,61 @@ def main():
     )
 
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=messages,
-        config=types.GenerateContentConfig(
-            tools=[available_functions],
-            system_instruction=system_prompt
-        ),
-    )
-    
-    if not response.usage_metadata:
-        raise RuntimeError("Gemini API response appears to be malformed")
-    
-    prompt_tokens = response.usage_metadata.prompt_token_count
-    response_tokens = response.usage_metadata.candidates_token_count
-    
+    try:
+        for i in range(20):    
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    tools=[available_functions],
+                    system_instruction=system_prompt
+                ),
+            )
+        
+            response_candidates = response.candidates
+            for candidate in response_candidates:
+                messages.append(candidate.content)
 
-    if response.function_calls:
-        tool_responses = []
-        for function_call_part in response.function_calls:
-            function_call_result = call_function(function_call_part, verbose=args.verbose)
-            parts = function_call_result.parts
-            if not parts or not parts[0].function_response or not parts[0].function_response.response:
-                raise Exception("Fatal error: Couldn't find tool response.")
-            tool_responses.append(parts[0])
+            if not response.usage_metadata:
+                raise RuntimeError("Gemini API response appears to be malformed")
+            
+            prompt_tokens = response.usage_metadata.prompt_token_count
+            response_tokens = response.usage_metadata.candidates_token_count
+            
+
+            if response.function_calls:
+                tool_responses = []
+                for function_call_part in response.function_calls:
+                    function_call_result = call_function(function_call_part, verbose=args.verbose)
+                    parts = function_call_result.parts
+                    if not parts or not parts[0].function_response or not parts[0].function_response.response:
+                        raise Exception("Fatal error: Couldn't find tool response.")
+                    tool_responses.append(parts[0])
+                    
+                    if args.verbose:
+                        print(f"-> {function_call_result.parts[0].function_response.response}")
+                
+                function_calls = types.Content(role="user", parts=tool_responses)
+                messages.append(function_calls)
+                    
+            else:
+                if response.text:
+                    print("Response:")
+                    print(response.text)
+                    break
+                else:
+                    print("Error: Couldn't find response")
+                    break
+
+            
 
             if args.verbose:
-                print(f"-> {function_call_result.parts[0].function_response.response}")
+                print("User prompt:", args.user_prompt)
+                print("Prompt tokens:", prompt_tokens)
+                print("Response tokens:", response_tokens)
+    except Exception as e:
+        print(f'Error: {e}')
             
-    else:
-        print("Response:")
-        print(response.text)
-
-    if args.verbose:
-        print("User prompt:", args.user_prompt)
-        print("Prompt tokens:", prompt_tokens)
-        print("Response tokens:", response_tokens)
-        
 
 if __name__ == "__main__":
     main()
